@@ -4,7 +4,7 @@
   <title><![CDATA[ql.io blog]]></title>
   <link href="http://ql-io.github.com/atom.xml" rel="self"/>
   <link href="http://ql-io.github.com/"/>
-  <updated>2012-03-12T18:19:19-07:00</updated>
+  <updated>2012-07-20T22:20:43-07:00</updated>
   <id>http://ql-io.github.com/</id>
   <author>
     <name><![CDATA[ql.io]]></name>
@@ -14,10 +14,354 @@
 
   
   <entry>
-    <title type="html"><![CDATA[Build Your Own APIs]]></title>
-    <link href="http://ql-io.github.com/2012/03/12/build-your-own-apis.html"/>
+    <title type="html"><![CDATA[ql.io 0.7]]></title>
+    <link href="http://ql-io.github.com/2012/06/29/ql.io-0.7.html"/>
+    <updated>2012-06-29T00:00:00-07:00</updated>
+    <id>http://ql-io.github.com/2012/06/29/ql.io-0.7</id>
+    <content type="html"><![CDATA[<p>Today&#8217;s release of ql.io 0.7 includes the following changes:</p>
+
+<h3>Features</h3>
+
+<ul>
+<li>Fallback syntax to the language - see https://github.com/ql-io/ql.io/wiki/%5BProposal%5D-Optional-Inputs-and-Errors</li>
+<li>Compiler rewritten to output the DAG with dependencies</li>
+<li>Explicit depedencies between modules</li>
+<li>Support for pre-requisite params - see https://github.com/ql-io/ql.io/wiki/%5BProposal%5D-Optional-Inputs-and-Errors</li>
+<li>Retry once for idempotent requests on timeouts</li>
+<li>Update the context with the udf filtered data</li>
+<li>Support C style block comments</li>
+<li>No Compression if the CPU load is > 50%</li>
+</ul>
+
+
+<h3>Bug Fixes</h3>
+
+<ul>
+<li>Http client Agent maxSockets increased to 1000 to avoid request backlog on any given socket -  https://github.com/ql-io/ql.io/issues/512</li>
+<li>Fix https://github.com/ql-io/ql.io/issues/478</li>
+<li>Fix https://github.com/ql-io/ql.io/issues/13 Disable autorun in the console.</li>
+<li>Add file path/name to comiple errors</li>
+</ul>
+
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Evented Orchestration]]></title>
+    <link href="http://ql-io.github.com/2012/06/08/plan.html"/>
+    <updated>2012-06-08T00:00:00-07:00</updated>
+    <id>http://ql-io.github.com/2012/06/08/plan</id>
+    <content type="html"><![CDATA[<p>One of the core strengths of ql.io is evented orchestration of reads and writes to HTTP APIs using a
+declarative language. In recent weeks, the core processing algorithm used to process q.l.io scripts
+went through an overhaul to easily infer what goes on when you submit a script for execution. The
+outcome of this exercise is a rewrite of the compiler which now takes a given script and outputs an
+execution plan. This helped us achieve two things - further simplification of the orchestration
+algorithm (which is now just about 80 lines long), and visualization to identify potential latecy
+bottlenecks.</p>
+
+<p>Read on to find out how to generate and visualize execution plans.</p>
+
+<p>For instance, consider the script</p>
+
+<pre><code>prodid = select ProductID[0].Value from eBay.FindProducts where
+    QueryKeywords = 'macbook pro';
+details = select * from eBay.ProductDetails where
+    ProductID in ('{prodid}') and ProductType = 'Reference';
+reviews = select * from eBay.ProductReviews where
+    ProductID in ('{prodid}') and ProductType = 'Reference';
+
+return select d.ProductID[0].Value as id, d.Title as title,
+    d.ReviewCount as reviewCount, r.ReviewDetails.AverageRating as rating
+    from details as d, reviews as r
+    where d.ProductID[0].Value = r.ProductID.Value
+    via route '/myapi' using method get;
+</code></pre>
+
+<p>A visualization of the execution plan of this script is below.</p>
+
+<div style="max-width: 100%;overflow:auto">
+<a href="http://ql-io.github.com/images/2012-06-08-plan-0.svg"><img src="http://ql-io.github.com/images/2012-06-08-plan-0.svg" style="max-width: 1000%" alt="A visualization of a script with one fork and one join"></a>
+</div>
+
+
+<p>By looking at this execution plan we can infer the following:</p>
+
+<ul>
+<li>The select statemet on line 8 depends on the statements on lines 3 and 5.</li>
+<li>The overall latency of this script depends on the slowest of the statements on lines 3 and 5.</li>
+</ul>
+
+
+<p>Here is the execution plan of another script. This script takes two inputs - a user&#8217;s identity and a
+set of IDs of some items, and gets some details from two different APIs (the bottom two nodes). The
+responses from those APIs trigger some in-process data extractions and transformations which join
+on the node below the node at the top.</p>
+
+<div style="max-width: 100%;overflow:auto">
+<a href="http://ql-io.github.com/images/2012-06-08-plan-1.svg"><img src="http://ql-io.github.com/images/2012-06-08-plan-1.svg" style="max-width: 1000%" alt="Another visualization"></a>
+</div>
+
+
+<p>Again, the overall latency depends on the bottom two nodes.</p>
+
+<p>Here is the execution plan of another script which shows one node ([5]) blocking on another ([1]).</p>
+
+<div style="max-width: 100%;overflow:auto">
+<a href="http://ql-io.github.com/images/2012-06-08-plan-3.svg"><img src="http://ql-io.github.com/images/2012-06-08-plan-3.svg" style="max-width: 1000%" alt="Another visualization"></a>
+</div>
+
+
+<h2>Generating Excecution Plan</h2>
+
+<p>Generating the execution plan is easy. Here is a node.js script.</p>
+
+<script src="https://gist.github.com/2898580.js"> </script>
+
+
+<p>You can use the compiler in the browser too. Here is script that works in any modern browser.</p>
+
+<script src="https://gist.github.com/2898590.js"> </script>
+
+
+<h2>Visualization</h2>
+
+<p>I wrote a small tool to compile a script and generate a .dot file, and feed the output to
+<a href="http://www.graphviz.org/">Graphviz</a>.</p>
+
+<p><a href="http://bl.ocks.org/d/2898080/">Dot file generator</a> - to generate .dot files for ql.io scripts.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[ql.io 0.6]]></title>
+    <link href="http://ql-io.github.com/2012/05/21/ql.io-0.6.html"/>
+    <updated>2012-05-21T00:00:00-07:00</updated>
+    <id>http://ql-io.github.com/2012/05/21/ql.io-0.6</id>
+    <content type="html"><![CDATA[<p>Today&#8217;s release of ql.io 0.6 includes the following changes:</p>
+
+<ul>
+<li>Support array style reference in columns clause, such as <code>select 'b-1', 'b-3'['c-1'] from a</code>.</li>
+<li>Disable ability to enable/disable ecv checks by default. You can turn it on by adding arg
+ <code>--ecvControl true</code> to the start script.</li>
+<li>Add optional parameters in route. Including &#8220;with optional params&#8221; in route would make params
+without <code>^</code> prefix optional. When this clause is present, only required tokens are used for
+matching a request to a route.</li>
+<li>Be able to start the server on multiple ports</li>
+<li>Added support for multiple attachments. See docs on insert http://ql.io/docs/insert</li>
+<li>End pending connections on close after responses are written.</li>
+<li>Support cache events (hit, miss, new, error, info, heartbeat)</li>
+<li>Switch to new cluster2</li>
+<li>Added new syntaxes &#8220;with part&#8221; and opaque insert param.</li>
+<li>Fix expression parsing in string template so that a token like <code>"{obj.prop[?(@.price &gt; 2)]}"</code> is
+valid</li>
+<li>Add support for escaped quotes in string values</li>
+<li>Update PEG.js to 0.7.</li>
+<li>Remove duplicates from in clause.</li>
+<li>Use <code>hasOwnProperty</code> in place of prop lookup while joining</li>
+<li>Deal with non UTF-8 encodings from upstream resources</li>
+<li>When joining, use &#8216;==&#8217; to maintain backwards compat</li>
+<li>Refactor logging to error, access, proxy and default logs. The proxy log file contains outgoing
+req/resp, access log contains incoming requests, error log contains all errors and warnings,
+and the rest go to ql.io.log. All these files are rotated.</li>
+<li>Include a payload with begin events</li>
+<li>Support local offset and limit</li>
+<li>Fix the case of alias names with joins and UDFs.</li>
+<li>Add UDFs in where clause to post process rows. You can either tweak or remove a row. See
+https://gist.github.com/2334012 for semantics of UDFs. UDF support for the where clause is coming
+in version 0.7.</li>
+</ul>
+
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[cluster2]]></title>
+    <link href="http://ql-io.github.com/2012/04/28/cluster2.html"/>
+    <updated>2012-04-28T00:00:00-07:00</updated>
+    <id>http://ql-io.github.com/2012/04/28/cluster2</id>
+    <content type="html"><![CDATA[<p>cluster2 is a node.js (>= 0.6.x) compatible multi-process management module. This module grew out of
+our needs in operationalizing node.js for <a href="https://github.com/ql-io/ql.io">ql.io</a> at eBay. Built on
+node&#8217;s <code>cluster</code>, cluster2 adds several safeguards and utility functions to help support real-world
+production scenarios:</p>
+
+<ul>
+<li>Scriptable start, shutdown and stop flows</li>
+<li>Worker monitoring for process deaths</li>
+<li>Worker recycling</li>
+<li>Graceful shutdown</li>
+<li>Idle timeouts</li>
+<li>Validation hooks (for other tools to monitor cluster2 apps)</li>
+<li>Events for logging cluster activities</li>
+</ul>
+
+
+<p>See <a href="http://ql-io.github.com/cluster2/">cluster2</a> for more info.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[ql.io 0.5]]></title>
+    <link href="http://ql-io.github.com/2012/03/30/ql.io-0.5.html"/>
+    <updated>2012-03-30T00:00:00-07:00</updated>
+    <id>http://ql-io.github.com/2012/03/30/ql.io-0.5</id>
+    <content type="html"><![CDATA[<p>Today&#8217;s release of ql.io 0.5 includes the following changes:</p>
+
+<!-- more -->
+
+
+<ul>
+<li>Enable caching on ql.io response. You can add <code>using headers</code> clause to routes to add arbitrary
+response headers, as in
+<code>return 'hello' via route '/hello' using method get using headers 'Cache-Control' = 'max-age=3600';</code></li>
+<li>[Experimental] Enable caching of responses from APIs for select statements. <code>create table</code>
+statements can now include an <code>expires &lt;interval&gt;</code> clause to specify an interval for caching
+responses of <code>select</code> statements, as in <code>create table auto.compute.key on select get from 'http://a.uri.net' ... expires 10;</code></li>
+<li>Process gzip/deflate encoded responses from upstream servers.</li>
+<li>Support <code>Content-Encoding</code> for incoming requests and gzip/deflate encode responses.</li>
+<li>Several bug fixes to maintain hierarchical logging of script execution. You can handle events
+emitted by the engine to log script execution flow. Watch this blog for an example soon.</li>
+<li>Factor out cluster management to a new module <a href="https://github.com/ql-io/cluster2">cluster2</a> to
+support deployments on <a href="https://github.com/ql-io/ql.io-cloudfoundry">CloudFoundry</a> and
+<a href="https://github.com/mulder/ql.io-heroku">Heroku</a>.</li>
+<li>New URI <code>/api</code> to navigate tables and routes - see
+<a href="http://ql-io.github.com/2012/03/12/en-route.html">En Route</a> for details.</li>
+<li>Support <code>delete</code> statements.</li>
+<li>Upgrade CodeMirror to 2.22 to resolve some quirks in the console UI.</li>
+<li>Add a page to show all installed npm packages. Try http://<host>:<monport>/deps
+(or http://localhost:3001/deps).</li>
+<li>Support custom xml2json convertors to enable clients interop with legacy XML APIs.</li>
+<li>Recover shutdown/stop from extraneous pid files.</li>
+<li>Simplify response decoding. In stead of setting encoding on the response, collect buffers into
+array, and then decode in the default impl of &#8216;parse response&#8217;.</li>
+<li>Removed /in-flight requests api.</li>
+<li>Enable numbers in <code>in</code> clause and args of udfs</li>
+<li>Export version from each module. You can find version of a module using
+<code>require('ql.io-&lt;somemodule&gt;').version</code>.</li>
+<li>Include version number in <code>User-Agent</code> and <code>Server</code> headers.</li>
+<li>Support scatter-gather for requests with bodies by adding a <code>foreach 'param'</code> for the
+<code>using bodyTemplate</code> cluase. This allows scripts to batchup POST and PUT requests.</li>
+<li>Support ejs body templates.</li>
+<li>Skip files that don&#8217;t end with <code>.ql</code>.</li>
+<li>&#8220;/ecv&#8221; check returns network ip instead of loopback address</li>
+<li>Let the engine allow a monkey patch to parse the response. Useful to process binary formats like avro.</li>
+</ul>
+
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[ql.io on Cloud Foundry]]></title>
+    <link href="http://ql-io.github.com/2012/03/21/ql.io-on-cloudfoundry.html"/>
+    <updated>2012-03-21T00:00:00-07:00</updated>
+    <id>http://ql-io.github.com/2012/03/21/ql.io-on-cloudfoundry</id>
+    <content type="html"><![CDATA[<p>Here are the steps to deploy ql.io on Cloud Foundry with node 0.6.x. This setup automatically spawns
+a cluster of node processes using node&#8217;s native cluster. A sample app to demonstrate these steps is
+on <a href="http://ql-io.github.com/2012/03/21/ql.io-on-cloudfoundry.html">github</a> - this includes an
+<a href="https://github.com/ql-io/ql.io-cloudfoundry/blob/master/app.js">app.js</a> and a
+<a href="https://github.com/ql-io/ql.io-cloudfoundry/blob/master/package.json">package.json</a> with all the
+dependencies.</p>
+
+<!-- more -->
+
+
+<h2>Setup Cloud Foundry</h2>
+
+<p>Setup a working Cloud Foundry environment with matching architecture for development and deployment.
+ ql.io relies non <code>node-expat</code> and hence npm modules installed on the development machine must be
+ portable to your Cloud Foundry VM. This rules out using a Mac or Windows for development and
+ <a href="https://my.cloudfoundry.com/micro">Micro Cloud Foundry</a> with Ubuntu for testing the deployment.</p>
+
+<p>If you want to try on a Mac with Micro Cloud Foundry from Mac, use the Micro Cloud Foundry VM as the
+development machine. Here are the steps to use.</p>
+
+<ul>
+<li><code>ssh vcap@&lt;your Micro Cloud Foundry IP&gt;</code></li>
+<li>Install <a href="http://start.cloudfoundry.com/tools/vmc/installing-vmc.html">vmc</a>.</li>
+<li>Download and build node (0.6.x)</li>
+<li><code>sudo apt-get install expat libexpat-dev</code></li>
+</ul>
+
+
+<h2>Upgrade nginx</h2>
+
+<p>Upgrae nginx on on the Cloud Foundry target machine. This step is required to let nginx correctly
+serve chunked encoded responses without <code>Content-Length</code> headers.</p>
+
+<ul>
+<li><code>ssh vcap@&lt;your Micro Cloud Foundry IP&gt;</code></li>
+<li><code>cd /tmp</code></li>
+<li><code>su -</code></li>
+<li><code>curl https://raw.github.com/gist/2187930/e081d925a881e51ef44f19bc5649b2918a1e86d4/mcf_nginx_11.sh | bash</code></li>
+</ul>
+
+
+<h2>Setup an App</h2>
+
+<pre><code>git clone git@github.com:ql-io/ql.io-cloudfoundry.git cfapp
+</code></pre>
+
+<p><code>vmc</code> failed for me when the directory name of the app had numbers and dots, and hence use a name
+without such characters for the app.</p>
+
+<pre><code>cd cfapp
+npm install
+</code></pre>
+
+<p>Add tables and routes as usual.</p>
+
+<h2>Push the App</h2>
+
+<pre><code>~/cfapp/vmc push --runtime=node06
+Would you like to deploy from the current directory? [Yn]: y
+Application Name: cfapp
+Application Deployed URL [cfapp.xxx.cloudfoundry.me]: &lt;use your deployment URL&gt;
+Detected a Node.js Application, is this correct? [Yn]:
+Memory Reservation (64M, 128M, 256M, 512M, 1G) [64M]: 512M
+Creating Application: OK
+Would you like to bind any services to 'cfapp'? [yN]: n
+Uploading Application:
+Checking for available resources: OK
+Processing resources: OK
+Packing application: OK
+Uploading (160K): OK
+Push Status: OK
+Staging Application: OK
+Starting Application: OK
+</code></pre>
+
+<p>Note that, using 512M or more is important - the default 64M is not sufficient for running a cluster
+of node instances with all ql.io modules, and <code>vmc</code> fails silently with the default.</p>
+
+<h2>Known Issues</h2>
+
+<p>Here is a summary of issues that I ran into while trying this out.</p>
+
+<ol>
+<li>Don&#8217;t forget to add <code>--runtime=node06</code> to <code>vmc push</code>. By default, Cloud Foundry uses node 0.4.x.</li>
+<li>Reserve appropriate memory for the app. <code>app.js</code> spans <code>n+1</code> node processes where <code>n</code> equals the
+number of the CPU threads on the VM.</li>
+<li>Don&#8217;t use characters like <code>.</code> and <code>-</code> in the name of the app.</li>
+<li>Cloud Foundry uses an L7 router and hence breaks ql.io&#8217;s console as it uses WebSocket API. If
+you would like to use the console on Cloud Foundry, use Safari.</li>
+<li>The <code>app.js</code> bundled with <a href="https://github.com/ql-io/ql.io-cloudfoundry">ql.io-cloudfoundry</a> leaves
+the paths <code>/console</code>, and <code>/q</code> open for traffic. I don&#8217;t recommend this. In production, consider
+disabling these two and use routes in stead from client apps by changing the <code>options</code> in
+<code>app.js</code> to the following.</li>
+</ol>
+
+
+<script src="https://gist.github.com/2147268.js"> </script>
+
+
+
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[En Route]]></title>
+    <link href="http://ql-io.github.com/2012/03/12/en-route.html"/>
     <updated>2012-03-12T00:00:00-07:00</updated>
-    <id>http://ql-io.github.com/2012/03/12/build-your-own-apis</id>
+    <id>http://ql-io.github.com/2012/03/12/en-route</id>
     <content type="html"><![CDATA[<p>A route in ql.io is a new consumer-optimized HTTP interface. Routes superimpose a simple and familiar HTTP interface on ql.io scripts without needing to specify an elaborate script in the request. In other words, routes make ql.io a platform to &#8220;build your own APIs&#8221;.</p>
 
 <p>Having built this capability, in this post I want to highlight some potential ways to take advantage of routes.</p>
@@ -29,7 +373,7 @@
 
 <p>Let&#8217;s imagine you built some new APIs using ql.io. How can your users find more about those APIs? Here is how.</p>
 
-<p>Every ql.io now includes a special URI <code>http://{host}:{port}/api</code> that lets you browse through the following:</p>
+<p>Every ql.io instance3 now includes a special URI <code>http://{host}:{port}/api</code> that lets you browse through the following:</p>
 
 <ul>
 <li>List of routes</li>
@@ -41,9 +385,9 @@
 
 <p>Here is an example.</p>
 
-<p><img src="http://ql-io.github.com/images/2012-03-12-byoa-1.png" alt="API browsing" /></p>
+<p><a href="http://ql.io/api"><img src="http://ql-io.github.com/images/2012-03-12-en-route-1.png" alt="API browsing" /></a></p>
 
-<p>Go to <a href="http://ql.io/apis">http://ql.io/apis</a> to try it out. Though this capability is automatic, it needs a couple of actions as you build tables and routes.</p>
+<p>Go to <a href="http://ql.io/api">http://ql.io/api</a> to try it out. Though this capability is automatic, it needs a couple of actions as you build tables and routes.</p>
 
 <h2>Parametrizing</h2>
 

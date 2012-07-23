@@ -1,0 +1,357 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>ql.io on Cloud Foundry - ql.io blog</title>
+  <meta name="author" content="ql.io">
+
+  
+  <meta name="description" content="Here are the steps to deploy ql.io on Cloud Foundry with node 0.6.x. This setup automatically spawns
+a cluster of node processes using node&#8217;s &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://ql-io.github.com/2012/03/21/ql.io-on-cloudfoundry.html">
+  <link href="/favicon.ico" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="/javascripts/ender.js"></script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <link href="/atom.xml" rel="alternate" title="ql.io blog" type="application/atom+xml">
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+  <script type="text/javascript">
+    var _gaq = _gaq || [];
+    _gaq.push(['_setAccount', 'UA-21835406-5']);
+    _gaq.push(['_trackPageview']);
+
+    (function() {
+      var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+      ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+      var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+    })();
+  </script>
+
+
+</head>
+
+<body   >
+  <p class="top-links">
+    <span style="float:left"><a href="/">ql.io blog</a></span>
+    <a href="http://ql.io/">project</a> |
+    <a href="https://github.com/ql-io/ql.io/">github</a> |
+    <a href="/blog/archives">archives</a> |
+    <a href="/atom.xml">subscribe</a>
+</p>
+
+
+
+  <nav role="navigation"><!--<ul class="subscription" data-subscription="rss">-->
+  <!--<li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>-->
+  <!---->
+<!--</ul>-->
+  <!---->
+<!--<form action="http://google.com/search" method="get">-->
+  <!--<fieldset role="search">-->
+    <!--<input type="hidden" name="q" value="site:ql-io.github.com" />-->
+    <!--<input class="search" type="text" name="q" results="0" placeholder="Search"/>-->
+  <!--</fieldset>-->
+<!--</form>-->
+  <!---->
+<!--<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="https://github.com/ql-io/ql.io/">Github</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+-->
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">ql.io on Cloud Foundry</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2012-03-21T00:00:00-07:00" pubdate data-updated="true">Mar 21<span>st</span>, 2012</time>
+        
+         | <a href="#disqus_thread">Comments</a>
+        
+      </p>
+      <p>
+        
+  
+
+
+<span class="byline author vcard">Posted by <a href="http://github.com/s3u">Subbu Allamaraju</a></span>
+
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>Here are the steps to deploy ql.io on Cloud Foundry with node 0.6.x. This setup automatically spawns
+a cluster of node processes using node&#8217;s native cluster. A sample app to demonstrate these steps is
+on <a href="http://ql-io.github.com/2012/03/21/ql.io-on-cloudfoundry.html">github</a> - this includes an
+<a href="https://github.com/ql-io/ql.io-cloudfoundry/blob/master/app.js">app.js</a> and a
+<a href="https://github.com/ql-io/ql.io-cloudfoundry/blob/master/package.json">package.json</a> with all the
+dependencies.</p>
+
+<!-- more -->
+
+
+<h2>Setup Cloud Foundry</h2>
+
+<p>Setup a working Cloud Foundry environment with matching architecture for development and deployment.
+ ql.io relies non <code>node-expat</code> and hence npm modules installed on the development machine must be
+ portable to your Cloud Foundry VM. This rules out using a Mac or Windows for development and
+ <a href="https://my.cloudfoundry.com/micro">Micro Cloud Foundry</a> with Ubuntu for testing the deployment.</p>
+
+<p>If you want to try on a Mac with Micro Cloud Foundry from Mac, use the Micro Cloud Foundry VM as the
+development machine. Here are the steps to use.</p>
+
+<ul>
+<li><code>ssh vcap@&lt;your Micro Cloud Foundry IP&gt;</code></li>
+<li>Install <a href="http://start.cloudfoundry.com/tools/vmc/installing-vmc.html">vmc</a>.</li>
+<li>Download and build node (0.6.x)</li>
+<li><code>sudo apt-get install expat libexpat-dev</code></li>
+</ul>
+
+
+<h2>Upgrade nginx</h2>
+
+<p>Upgrae nginx on on the Cloud Foundry target machine. This step is required to let nginx correctly
+serve chunked encoded responses without <code>Content-Length</code> headers.</p>
+
+<ul>
+<li><code>ssh vcap@&lt;your Micro Cloud Foundry IP&gt;</code></li>
+<li><code>cd /tmp</code></li>
+<li><code>su -</code></li>
+<li><code>curl https://raw.github.com/gist/2187930/e081d925a881e51ef44f19bc5649b2918a1e86d4/mcf_nginx_11.sh | bash</code></li>
+</ul>
+
+
+<h2>Setup an App</h2>
+
+<pre><code>git clone git@github.com:ql-io/ql.io-cloudfoundry.git cfapp
+</code></pre>
+
+<p><code>vmc</code> failed for me when the directory name of the app had numbers and dots, and hence use a name
+without such characters for the app.</p>
+
+<pre><code>cd cfapp
+npm install
+</code></pre>
+
+<p>Add tables and routes as usual.</p>
+
+<h2>Push the App</h2>
+
+<pre><code>~/cfapp/vmc push --runtime=node06
+Would you like to deploy from the current directory? [Yn]: y
+Application Name: cfapp
+Application Deployed URL [cfapp.xxx.cloudfoundry.me]: &lt;use your deployment URL&gt;
+Detected a Node.js Application, is this correct? [Yn]:
+Memory Reservation (64M, 128M, 256M, 512M, 1G) [64M]: 512M
+Creating Application: OK
+Would you like to bind any services to 'cfapp'? [yN]: n
+Uploading Application:
+Checking for available resources: OK
+Processing resources: OK
+Packing application: OK
+Uploading (160K): OK
+Push Status: OK
+Staging Application: OK
+Starting Application: OK
+</code></pre>
+
+<p>Note that, using 512M or more is important - the default 64M is not sufficient for running a cluster
+of node instances with all ql.io modules, and <code>vmc</code> fails silently with the default.</p>
+
+<h2>Known Issues</h2>
+
+<p>Here is a summary of issues that I ran into while trying this out.</p>
+
+<ol>
+<li>Don&#8217;t forget to add <code>--runtime=node06</code> to <code>vmc push</code>. By default, Cloud Foundry uses node 0.4.x.</li>
+<li>Reserve appropriate memory for the app. <code>app.js</code> spans <code>n+1</code> node processes where <code>n</code> equals the
+number of the CPU threads on the VM.</li>
+<li>Don&#8217;t use characters like <code>.</code> and <code>-</code> in the name of the app.</li>
+<li>Cloud Foundry uses an L7 router and hence breaks ql.io&#8217;s console as it uses WebSocket API. If
+you would like to use the console on Cloud Foundry, use Safari.</li>
+<li>The <code>app.js</code> bundled with <a href="https://github.com/ql-io/ql.io-cloudfoundry">ql.io-cloudfoundry</a> leaves
+the paths <code>/console</code>, and <code>/q</code> open for traffic. I don&#8217;t recommend this. In production, consider
+disabling these two and use routes in stead from client apps by changing the <code>options</code> in
+<code>app.js</code> to the following.</li>
+</ol>
+
+
+<script src="https://gist.github.com/2147268.js"> </script>
+
+
+
+</div>
+
+
+  <footer>
+    
+      <div class="sharing">
+  
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://ql-io.github.com/2012/03/21/ql.io-on-cloudfoundry.html" data-via="" data-counturl="http://ql-io.github.com/2012/03/21/ql.io-on-cloudfoundry.html" >Tweet</a>
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/2012/03/12/en-route.html" title="Previous Post: En Route">&laquo; En Route</a>
+      
+      
+        <a class="basic-alignment right" href="/2012/03/30/ql.io-0.5.html" title="Next Post: ql.io 0.5">ql.io 0.5 &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+  <section>
+    <h1>Comments</h1>
+    <div id="disqus_thread" aria-live="polite"><noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/2012/06/29/ql.io-0.7.html">ql.io 0.7</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2012/06/08/plan.html">Evented Orchestration</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2012/05/21/ql.io-0.6.html">ql.io 0.6</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2012/04/28/cluster2.html">cluster2</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2012/03/30/ql.io-0.5.html">ql.io 0.5</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2012/03/21/ql.io-on-cloudfoundry.html">ql.io on Cloud Foundry</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2012/03/12/en-route.html">En Route</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2012/02/22/making-peace.html">Making Peace with HTTP APIs</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2012/02/13/v0.4.html">ql.io 0.4.0</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2012/02/12/nodepdx-slides.html">Slides from NodePDX</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2012 - ql.io -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+<script type="text/javascript">
+      var disqus_shortname = 'qlioblog';
+      
+        
+        // var disqus_developer = 1;
+        var disqus_identifier = 'http://ql-io.github.com/2012/03/21/ql.io-on-cloudfoundry.html';
+        var disqus_url = 'http://ql-io.github.com/2012/03/21/ql.io-on-cloudfoundry.html';
+        var disqus_script = 'embed.js';
+      
+    (function () {
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = 'http://' + disqus_shortname + '.disqus.com/' + disqus_script;
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    }());
+</script>
+
+
+
+
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+
+</body>
+</html>

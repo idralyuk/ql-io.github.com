@@ -9,7 +9,7 @@
   <meta name="author" content="ql.io">
 
   
-  <meta name="description" content="A route in ql.io is a new consumer-optimized HTTP interface. Routes superimpose a simple and familiar HTTP interface on ql.io scripts without needing &hellip;">
+  <meta name="description" content="Today&#8217;s release of ql.io 0.7 includes the following changes: Features Fallback syntax to the language - see https://github.com/ql-io/ql.io/wiki &hellip;">
   
 
   <!-- http://t.co/dKP3o1e -->
@@ -85,7 +85,448 @@
       
   <header>
     
-      <h1 class="entry-title"><a href="/2012/03/12/build-your-own-apis.html">Build Your Own APIs</a></h1>
+      <h1 class="entry-title"><a href="/2012/06/29/ql.io-0.7.html">ql.io 0.7</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2012-06-29T00:00:00-07:00" pubdate data-updated="true">Jun 29<span>th</span>, 2012</time>
+        
+         | <a href="/2012/06/29/ql.io-0.7.html#disqus_thread">Comments</a>
+        
+      </p>
+      <p>
+        
+  
+
+
+<span class="byline author vcard">Posted by <a href="http://github.com/prabhakhar">Prabhakhar Kaliamurthy</a></span>
+
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Today&#8217;s release of ql.io 0.7 includes the following changes:</p>
+
+<h3>Features</h3>
+
+<ul>
+<li>Fallback syntax to the language - see https://github.com/ql-io/ql.io/wiki/%5BProposal%5D-Optional-Inputs-and-Errors</li>
+<li>Compiler rewritten to output the DAG with dependencies</li>
+<li>Explicit depedencies between modules</li>
+<li>Support for pre-requisite params - see https://github.com/ql-io/ql.io/wiki/%5BProposal%5D-Optional-Inputs-and-Errors</li>
+<li>Retry once for idempotent requests on timeouts</li>
+<li>Update the context with the udf filtered data</li>
+<li>Support C style block comments</li>
+<li>No Compression if the CPU load is > 50%</li>
+</ul>
+
+
+<h3>Bug Fixes</h3>
+
+<ul>
+<li>Http client Agent maxSockets increased to 1000 to avoid request backlog on any given socket -  https://github.com/ql-io/ql.io/issues/512</li>
+<li>Fix https://github.com/ql-io/ql.io/issues/478</li>
+<li>Fix https://github.com/ql-io/ql.io/issues/13 Disable autorun in the console.</li>
+<li>Add file path/name to comiple errors</li>
+</ul>
+
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/2012/06/08/plan.html">Evented Orchestration</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2012-06-08T00:00:00-07:00" pubdate data-updated="true">Jun 8<span>th</span>, 2012</time>
+        
+         | <a href="/2012/06/08/plan.html#disqus_thread">Comments</a>
+        
+      </p>
+      <p>
+        
+  
+
+
+<span class="byline author vcard">Posted by <a href="http://github.com/s3u">Subbu Allamaraju</a></span>
+
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>One of the core strengths of ql.io is evented orchestration of reads and writes to HTTP APIs using a
+declarative language. In recent weeks, the core processing algorithm used to process q.l.io scripts
+went through an overhaul to easily infer what goes on when you submit a script for execution. The
+outcome of this exercise is a rewrite of the compiler which now takes a given script and outputs an
+execution plan. This helped us achieve two things - further simplification of the orchestration
+algorithm (which is now just about 80 lines long), and visualization to identify potential latecy
+bottlenecks.</p>
+
+<p>Read on to find out how to generate and visualize execution plans.</p>
+
+<p>For instance, consider the script</p>
+
+<pre><code>prodid = select ProductID[0].Value from eBay.FindProducts where
+    QueryKeywords = 'macbook pro';
+details = select * from eBay.ProductDetails where
+    ProductID in ('{prodid}') and ProductType = 'Reference';
+reviews = select * from eBay.ProductReviews where
+    ProductID in ('{prodid}') and ProductType = 'Reference';
+
+return select d.ProductID[0].Value as id, d.Title as title,
+    d.ReviewCount as reviewCount, r.ReviewDetails.AverageRating as rating
+    from details as d, reviews as r
+    where d.ProductID[0].Value = r.ProductID.Value
+    via route '/myapi' using method get;
+</code></pre>
+
+<p>A visualization of the execution plan of this script is below.</p>
+
+<div style="max-width: 100%;overflow:auto">
+<a href="/images/2012-06-08-plan-0.svg"><img src="/images/2012-06-08-plan-0.svg" style="max-width: 1000%" alt="A visualization of a script with one fork and one join"></a>
+</div>
+
+
+<p>By looking at this execution plan we can infer the following:</p>
+
+<ul>
+<li>The select statemet on line 8 depends on the statements on lines 3 and 5.</li>
+<li>The overall latency of this script depends on the slowest of the statements on lines 3 and 5.</li>
+</ul>
+
+
+<p>Here is the execution plan of another script. This script takes two inputs - a user&#8217;s identity and a
+set of IDs of some items, and gets some details from two different APIs (the bottom two nodes). The
+responses from those APIs trigger some in-process data extractions and transformations which join
+on the node below the node at the top.</p>
+
+<div style="max-width: 100%;overflow:auto">
+<a href="/images/2012-06-08-plan-1.svg"><img src="/images/2012-06-08-plan-1.svg" style="max-width: 1000%" alt="Another visualization"></a>
+</div>
+
+
+<p>Again, the overall latency depends on the bottom two nodes.</p>
+
+<p>Here is the execution plan of another script which shows one node ([5]) blocking on another ([1]).</p>
+
+<div style="max-width: 100%;overflow:auto">
+<a href="/images/2012-06-08-plan-3.svg"><img src="/images/2012-06-08-plan-3.svg" style="max-width: 1000%" alt="Another visualization"></a>
+</div>
+
+
+<h2>Generating Excecution Plan</h2>
+
+<p>Generating the execution plan is easy. Here is a node.js script.</p>
+
+<script src="https://gist.github.com/2898580.js"> </script>
+
+
+<p>You can use the compiler in the browser too. Here is script that works in any modern browser.</p>
+
+<script src="https://gist.github.com/2898590.js"> </script>
+
+
+<h2>Visualization</h2>
+
+<p>I wrote a small tool to compile a script and generate a .dot file, and feed the output to
+<a href="http://www.graphviz.org/">Graphviz</a>.</p>
+
+<p><a href="http://bl.ocks.org/d/2898080/">Dot file generator</a> - to generate .dot files for ql.io scripts.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/2012/05/21/ql.io-0.6.html">ql.io 0.6</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2012-05-21T00:00:00-07:00" pubdate data-updated="true">May 21<span>st</span>, 2012</time>
+        
+         | <a href="/2012/05/21/ql.io-0.6.html#disqus_thread">Comments</a>
+        
+      </p>
+      <p>
+        
+  
+
+
+<span class="byline author vcard">Posted by <a href="http://github.com/s3u">Subbu Allamaraju</a></span>
+
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Today&#8217;s release of ql.io 0.6 includes the following changes:</p>
+
+<ul>
+<li>Support array style reference in columns clause, such as <code>select 'b-1', 'b-3'['c-1'] from a</code>.</li>
+<li>Disable ability to enable/disable ecv checks by default. You can turn it on by adding arg
+ <code>--ecvControl true</code> to the start script.</li>
+<li>Add optional parameters in route. Including &#8220;with optional params&#8221; in route would make params
+without <code>^</code> prefix optional. When this clause is present, only required tokens are used for
+matching a request to a route.</li>
+<li>Be able to start the server on multiple ports</li>
+<li>Added support for multiple attachments. See docs on insert http://ql.io/docs/insert</li>
+<li>End pending connections on close after responses are written.</li>
+<li>Support cache events (hit, miss, new, error, info, heartbeat)</li>
+<li>Switch to new cluster2</li>
+<li>Added new syntaxes &#8220;with part&#8221; and opaque insert param.</li>
+<li>Fix expression parsing in string template so that a token like <code>"{obj.prop[?(@.price &gt; 2)]}"</code> is
+valid</li>
+<li>Add support for escaped quotes in string values</li>
+<li>Update PEG.js to 0.7.</li>
+<li>Remove duplicates from in clause.</li>
+<li>Use <code>hasOwnProperty</code> in place of prop lookup while joining</li>
+<li>Deal with non UTF-8 encodings from upstream resources</li>
+<li>When joining, use &#8216;==&#8217; to maintain backwards compat</li>
+<li>Refactor logging to error, access, proxy and default logs. The proxy log file contains outgoing
+req/resp, access log contains incoming requests, error log contains all errors and warnings,
+and the rest go to ql.io.log. All these files are rotated.</li>
+<li>Include a payload with begin events</li>
+<li>Support local offset and limit</li>
+<li>Fix the case of alias names with joins and UDFs.</li>
+<li>Add UDFs in where clause to post process rows. You can either tweak or remove a row. See
+https://gist.github.com/2334012 for semantics of UDFs. UDF support for the where clause is coming
+in version 0.7.</li>
+</ul>
+
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/2012/04/28/cluster2.html">Cluster2</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2012-04-28T00:00:00-07:00" pubdate data-updated="true">Apr 28<span>th</span>, 2012</time>
+        
+         | <a href="/2012/04/28/cluster2.html#disqus_thread">Comments</a>
+        
+      </p>
+      <p>
+        
+  
+
+
+<span class="byline author vcard">Posted by <a href="http://github.com/s3u">Subbu Allamaraju</a></span>
+
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>cluster2 is a node.js (>= 0.6.x) compatible multi-process management module. This module grew out of
+our needs in operationalizing node.js for <a href="https://github.com/ql-io/ql.io">ql.io</a> at eBay. Built on
+node&#8217;s <code>cluster</code>, cluster2 adds several safeguards and utility functions to help support real-world
+production scenarios:</p>
+
+<ul>
+<li>Scriptable start, shutdown and stop flows</li>
+<li>Worker monitoring for process deaths</li>
+<li>Worker recycling</li>
+<li>Graceful shutdown</li>
+<li>Idle timeouts</li>
+<li>Validation hooks (for other tools to monitor cluster2 apps)</li>
+<li>Events for logging cluster activities</li>
+</ul>
+
+
+<p>See <a href="http://ql-io.github.com/cluster2/">cluster2</a> for more info.</p>
+</div>
+  
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/2012/03/30/ql.io-0.5.html">ql.io 0.5</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2012-03-30T00:00:00-07:00" pubdate data-updated="true">Mar 30<span>th</span>, 2012</time>
+        
+         | <a href="/2012/03/30/ql.io-0.5.html#disqus_thread">Comments</a>
+        
+      </p>
+      <p>
+        
+  
+
+
+<span class="byline author vcard">Posted by <a href="http://github.com/s3u">Subbu Allamaraju</a></span>
+
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Today&#8217;s release of ql.io 0.5 includes the following changes:</p>
+
+</div>
+  
+  
+    <footer>
+      <a rel="full-article" href="/2012/03/30/ql.io-0.5.html">Read on &rarr;</a>
+    </footer>
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/2012/03/21/ql.io-on-cloudfoundry.html">ql.io on Cloud Foundry</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2012-03-21T00:00:00-07:00" pubdate data-updated="true">Mar 21<span>st</span>, 2012</time>
+        
+         | <a href="/2012/03/21/ql.io-on-cloudfoundry.html#disqus_thread">Comments</a>
+        
+      </p>
+      <p>
+        
+  
+
+
+<span class="byline author vcard">Posted by <a href="http://github.com/s3u">Subbu Allamaraju</a></span>
+
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Here are the steps to deploy ql.io on Cloud Foundry with node 0.6.x. This setup automatically spawns
+a cluster of node processes using node&#8217;s native cluster. A sample app to demonstrate these steps is
+on <a href="http://ql-io.github.com/2012/03/21/ql.io-on-cloudfoundry.html">github</a> - this includes an
+<a href="https://github.com/ql-io/ql.io-cloudfoundry/blob/master/app.js">app.js</a> and a
+<a href="https://github.com/ql-io/ql.io-cloudfoundry/blob/master/package.json">package.json</a> with all the
+dependencies.</p>
+
+</div>
+  
+  
+    <footer>
+      <a rel="full-article" href="/2012/03/21/ql.io-on-cloudfoundry.html">Read on &rarr;</a>
+    </footer>
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/2012/03/12/en-route.html">En Route</a></h1>
     
     
       <p class="meta">
@@ -103,7 +544,7 @@
 
 <time datetime="2012-03-12T00:00:00-07:00" pubdate data-updated="true">Mar 12<span>th</span>, 2012</time>
         
-         | <a href="/2012/03/12/build-your-own-apis.html#disqus_thread">Comments</a>
+         | <a href="/2012/03/12/en-route.html#disqus_thread">Comments</a>
         
       </p>
       <p>
@@ -126,7 +567,7 @@
   
   
     <footer>
-      <a rel="full-article" href="/2012/03/12/build-your-own-apis.html">Read on &rarr;</a>
+      <a rel="full-article" href="/2012/03/12/en-route.html">Read on &rarr;</a>
     </footer>
   
 
@@ -303,386 +744,6 @@ complexity of such APIs.</p>
 
     </article>
   
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/2012/01/24/node-summit-slides.html">Slides From Node Summit</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2012-01-24T00:00:00-08:00" pubdate data-updated="true">Jan 24<span>th</span>, 2012</time>
-        
-         | <a href="/2012/01/24/node-summit-slides.html#disqus_thread">Comments</a>
-        
-      </p>
-      <p>
-        
-  
-
-
-<span class="byline author vcard">Posted by <a href="http://github.com/s3u">Subbu Allamaraju</a></span>
-
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>Here are the slides from the workshop on ql.io at the Node Summit titled
-&#8220;ql.io: Consuming HTTP at Scale&#8221;.</p>
-
-<div style="width:425px" id="__ss_11244206"> <strong style="display:block;margin:12px 0 4px"><a href="http://www.slideshare.net/sallamar/qlio-consuming-http-at-scale" title="ql.io: Consuming HTTP at Scale " target="_blank">ql.io: Consuming HTTP at Scale </a></strong> <iframe src="http://www.slideshare.net/slideshow/embed_code/11244206" width="425" height="355" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"></iframe> <div style="padding:5px 0 12px"> View more <a href="http://www.slideshare.net/thecroaker/death-by-powerpoint" target="_blank">PowerPoint</a> from <a href="http://www.slideshare.net/sallamar" target="_blank">Subbu Allamaraju</a> </div> </div>
-
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/2012/01/17/v0.4-beta.html">ql.io 0.4.0-beta</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2012-01-17T00:00:00-08:00" pubdate data-updated="true">Jan 17<span>th</span>, 2012</time>
-        
-         | <a href="/2012/01/17/v0.4-beta.html#disqus_thread">Comments</a>
-        
-      </p>
-      <p>
-        
-  
-
-
-<span class="byline author vcard">Posted by <a href="http://github.com/s3u">Subbu Allamaraju</a></span>
-
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>This is a beta release of ql.io on node.js 0.6.x.</p>
-
-<ul>
-<li>Use native cluster module to start the app</li>
-<li>Upgrade all dependencies to the latest</li>
-<li>Limit response size to 10000000 bytes from upstream sources. You can change this with
-<code>maxResponseLength</code> in the config.</li>
-<li>Limit outgoing requests per statement to 50. You can change this with <code>maxRequests</code> in the config.</li>
-<li>Chain events for logging done with log-emitter.</li>
-<li>Add a new JSON based interface to browse tables and routes. Try <code>/routes</code> to start browsing.</li>
-</ul>
-
-
-<p>If you are interested in running ql.io on node.js 0.4.x, use the
-<a href="https://github.com/ql-io/ql.io/tree/0.3">0.3 branch</a>.</p>
-
-<p>To create an app using ql.io 0.4 modules, follow the usual steps:</p>
-
-<pre><code> mkdir myapp
- cd myapp
- curl https://raw.github.com/ql-io/ql.io/master/modules/template/init.sh | bash
- bin/start.sh
-</code></pre>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/2012/01/09/benchmarks.html">ql.io Baseline Benchmarks</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2012-01-09T00:00:00-08:00" pubdate data-updated="true">Jan 9<span>th</span>, 2012</time>
-        
-         | <a href="/2012/01/09/benchmarks.html#disqus_thread">Comments</a>
-        
-      </p>
-      <p>
-        
-  
-
-
-<span class="byline author vcard">Posted by <a href="http://github.com/s3u">Subbu Allamaraju</a></span>
-
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>One of the key visible benefits of <a href="http://ql.io">ql.io</a> is that it eliminates the code noise that
-is common in writing HTTP client apps. As a DSL for writing HTTP client code, it focuses on
-automating the task of making multiple HTTP requests and processing responses in the best order
-possible taking care of paralleization, orchestration, projections and normalizations behind the
-scenes.</p>
-
-<p>In this post, I would like to present the baseline performance benchmarks of ql.io running on
-node.js 0.4.12. Though I have done some ad hoc tests in the last 2-3 months for hardware sizing
-purposes, this is my first systematic attempt.</p>
-
-</div>
-  
-  
-    <footer>
-      <a rel="full-article" href="/2012/01/09/benchmarks.html">Read on &rarr;</a>
-    </footer>
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/2011/12/17/no.de.html">ql.io on Joyent&#8217;s no.de</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2011-12-17T00:00:00-08:00" pubdate data-updated="true">Dec 17<span>th</span>, 2011</time>
-        
-         | <a href="/2011/12/17/no.de.html#disqus_thread">Comments</a>
-        
-      </p>
-      <p>
-        
-  
-
-
-<span class="byline author vcard">Posted by <a href="http://github.com/s3u">Subbu Allamaraju</a></span>
-
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><p>If you&#8217;re interested in setting a ql.io app instance on a Joyent&#8217;s <a href="https://no.de/">no.de</a>, here is
-how.</p>
-
-<ul>
-<li>Clone the template app</li>
-</ul>
-
-
-<pre class="brush: bash toolbar: false;">
-git clone git@github.com:ql-io/ql-io.no.de.git
-</pre>
-
-
-<p>This template includes a server.js, some sample ql.io scripts.</p>
-
-<ul>
-<li><p>Create a SmartMachine instance on no.de.</p></li>
-<li><p>Push the app to no.de</p></li>
-</ul>
-
-
-<pre class="brush: bash toolbar: false;">
-# Assuming your smart machine name is "foo"
-cd ql-io.no.de
-git remote add foo.no.de foo.no.de:repo
-git push foo.no.de master
-</pre>
-
-
-<p>This will push the app to your SmartMachine, and bring it up.</p>
-
-<ul>
-<li>Try a sample route.</li>
-</ul>
-
-
-<pre class="brush: bash toolbar: false;">
-curl http://foo.no.de/myapi
-</pre>
-
-
-<p>Use <code>http://foo.no.de/console</code> to view the console.</p>
-
-<p>See <a href="http://ql.no.de/myapi">ql.no.de/myapi</a> to see this example in action.</p>
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/2011/12/16/milestone.html">Milestone 6</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2011-12-16T00:00:00-08:00" pubdate data-updated="true">Dec 16<span>th</span>, 2011</time>
-        
-         | <a href="/2011/12/16/milestone.html#disqus_thread">Comments</a>
-        
-      </p>
-      <p>
-        
-  
-
-
-<span class="byline author vcard">Posted by <a href="http://github.com/s3u">Subbu Allamaraju</a></span>
-
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><ul>
-<li><p>Clients can occasionally get socket hangup errors when origin servers close connections without
-sending a <code>Connection: close</code> header. See
-<a href="https://github.com/joyent/node/issues/1135">https://github.com/joyent/node/issues/1135</a> for some
-background. To avoid such errors, http.request.js now automatically retries the request once
-provided the statement that caused the HTTP request is a <code>select</code>.</p></li>
-<li><p>The engine can now consume CSV response in addition to XML and JSON.</p></li>
-<li><p>Fixed request body processing for routes (see <a href="https://github.com/ql-io/ql.io/pull/161">issue 161</a>).</p></li>
-</ul>
-
-</div>
-  
-  
-
-
-    </article>
-  
-  
-    <article>
-      
-  <header>
-    
-      <h1 class="entry-title"><a href="/2011/12/08/milestone.html">Milestone 5</a></h1>
-    
-    
-      <p class="meta">
-        
-
-
-
-
-
-
-
-
-  
-
-
-<time datetime="2011-12-08T00:00:00-08:00" pubdate data-updated="true">Dec 8<span>th</span>, 2011</time>
-        
-         | <a href="/2011/12/08/milestone.html#disqus_thread">Comments</a>
-        
-      </p>
-      <p>
-        
-  
-
-
-<span class="byline author vcard">Posted by <a href="http://github.com/s3u">Subbu Allamaraju</a></span>
-
-      </p>
-    
-  </header>
-
-
-  <div class="entry-content"><ul>
-<li><p><a href="https://github.com/ql-io/ql.io/issues/121">OAuth example</a> - OAuth2 is trivial as ql.io proxies
-headers from clients to servers. OAuth1 requires glue code to compute the Authorization header.
-See <a href="http://ql.io/docs/oauth">http://ql.io/docs/oauth</a> for an example.</p></li>
-<li><p>Use npm installed modules for ql.io-site (<a href="https://github.com/ql-io/ql.io/issues/116">see issue 116</a>).</p></li>
-<li><p>Handle empty response bodies gracefully (<a href="https://github.com/ql-io/ql.io/issues/98">see issue 98</a>).</p></li>
-<li><p>Recover from partial failures in case of scatter-gather calls
-(<a href="https://github.com/ql-io/ql.io/issues/90">see issue 90</a>) - some statements can result in multiple
-HTTP requests. When this happens, the engine used to fail the entire statement if any of those
-requests fail. The engine now looks for success responses and aggregates them.</p></li>
-<li><p>Update CodeMirror to support line-wrapping (<a href="https://github.com/ql-io/ql.io/issues/11">See issue
-11</a>) - no need to split lines manually anymore.</p></li>
-</ul>
-
-</div>
-  
-  
-
-
-    </article>
-  
   <div class="pagination">
     
       <a class="prev" href="/blog/page/2/">&larr; Older</a>
@@ -698,7 +759,31 @@ requests fail. The engine now looks for success responses and aggregates them.</
   <ul id="recent_posts">
     
       <li class="post">
-        <a href="/2012/03/12/build-your-own-apis.html">Build Your Own APIs</a>
+        <a href="/2012/06/29/ql.io-0.7.html">ql.io 0.7</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2012/06/08/plan.html">Evented Orchestration</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2012/05/21/ql.io-0.6.html">ql.io 0.6</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2012/04/28/cluster2.html">cluster2</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2012/03/30/ql.io-0.5.html">ql.io 0.5</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2012/03/21/ql.io-on-cloudfoundry.html">ql.io on Cloud Foundry</a>
+      </li>
+    
+      <li class="post">
+        <a href="/2012/03/12/en-route.html">En Route</a>
       </li>
     
       <li class="post">
@@ -711,30 +796,6 @@ requests fail. The engine now looks for success responses and aggregates them.</
     
       <li class="post">
         <a href="/2012/02/12/nodepdx-slides.html">Slides from NodePDX</a>
-      </li>
-    
-      <li class="post">
-        <a href="/2012/01/24/node-summit-slides.html">Slides from Node Summit</a>
-      </li>
-    
-      <li class="post">
-        <a href="/2012/01/17/v0.4-beta.html">ql.io 0.4.0-beta</a>
-      </li>
-    
-      <li class="post">
-        <a href="/2012/01/09/benchmarks.html">ql.io Baseline Benchmarks</a>
-      </li>
-    
-      <li class="post">
-        <a href="/2011/12/17/no.de.html">ql.io on Joyent&#8217;s no.de</a>
-      </li>
-    
-      <li class="post">
-        <a href="/2011/12/16/milestone.html">Milestone 6</a>
-      </li>
-    
-      <li class="post">
-        <a href="/2011/12/08/milestone.html">Milestone 5</a>
       </li>
     
   </ul>
